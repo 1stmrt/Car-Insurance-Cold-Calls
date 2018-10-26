@@ -2,7 +2,8 @@ library(dplyr)
 library(lubridate)
 library(stringr)
 library(ggplot2)
-
+library(dummies)
+library(caret)
 
 cidata <- read.csv("Data/carInsurance_train.csv", header=T)
 
@@ -157,6 +158,42 @@ ggplot(data = cidata) + geom_density(aes(x= cidata$logBalance), fill = "grey50")
 cidata$Balance <- NULL
 
 summary(cidata)
-
+summary(cidata$starthour)
+summary(cidata$endhour)
 ## 전처리 끝
 
+## 팩터 -> 이진화
+startdummy <- predict(dummyVars(~starthour, data = cidata), newdata = cidata)
+startdummy <- as.data.frame(startdummy)
+
+enddummy <- predict(dummyVars(~endhour, data = cidata), newdata = cidata)
+enddummy <- as.data.frame(enddummy)
+
+jobdummy <- predict(dummyVars(~Job, data = cidata), newdata = cidata)
+jobdummy <- as.data.frame(jobdummy)
+
+maritaldummy <- predict(dummyVars(~Marital, data = cidata), newdata = cidata)
+maritaldummy <- as.data.frame(maritaldummy)
+
+edudummy <- predict(dummyVars(~Education_, data = cidata), newdata = cidata)
+edudummy <- as.data.frame(edudummy)
+
+OCdummy <- predict(dummyVars(~Outcome_, data = cidata), newdata = cidata)
+OCdummy <- as.data.frame(OCdummy)
+
+CCdummy <- predict(dummyVars(~Communication_, data = cidata), newdata = cidata)
+CCdummy <- as.data.frame(CCdummy)
+
+cidata <- cbind(cidata,startdummy,enddummy,jobdummy,maritaldummy,edudummy,OCdummy,CCdummy)
+
+cidata$Id <- NULL
+cidata$Job <- NULL
+cidata$Marital <- NULL
+cidata$starthour <- NULL
+cidata$endhour <- NULL
+cidata$Education_ <- NULL
+cidata$Communication_ <- NULL
+cidata$Outcome_ <- NULL
+
+summary(cidata)
+## 진짜로 끝
