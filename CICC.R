@@ -4,6 +4,11 @@ library(stringr)
 library(ggplot2)
 library(dummies)
 library(caret)
+library(doParallel)
+
+library(e1071)
+library(class)
+library(MASS)
 
 cidata <- read.csv("Data/carInsurance_train.csv", header=T)
 
@@ -197,3 +202,83 @@ cidata$Outcome_ <- NULL
 
 summary(cidata)
 ## 진짜로 끝
+
+cluster <- makeCluster(16)
+registerDoParallel(cluster)
+foreach::getDoParWorkers()
+
+## 데이터 분할
+
+cidata_success <- cidata[cidata$CarInsurance ==0,]
+cidata_fail <- cidata[cidata$CarInsurance ==1,]
+
+sample_success <- sample(1:nrow(cidata_success), nrow(cidata_success)*0.75)
+sample_fail <- sample(1:nrow(cidata_fail), nrow(cidata_fail)*0.75)
+
+cidata_train <- rbind(cidata_fail[sample_fail,], cidata_success[sample_success,])  # 2386 obs
+cidata_test  <- rbind(cidata_fail[-sample_fail,], cidata_success[-sample_success,])#  996 obs
+
+## 나이브 베이지언 ##
+
+cidata_naive <- naiveBayes(CarInsurance~., data = cidata_train)
+cidata_naive
+
+pred_cidata_naive_tr <- predict(cidata_naive, newdata = cidata_train)
+cidata_naive_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_naive_tr)
+cidata_naive_tr_CM
+(cidata_naive_tr_CM[1,1] + cidata_naive_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+# 나이브베이지언 훈련집합 : 72.8 %
+
+pred_cidata_naive_te <- predict(cidata_naive, newdata = cidata_test)
+cidata_naive_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_naive_te)
+cidata_naive_te_CM
+(cidata_naive_te_CM[1,1] + cidata_naive_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+# 나이브베이지언 평가집합 : 75.9 %
+
+## KNN ##
+
+tuning_knn <- tune.knn(x=cidata_train[,-7], y=cidata_train$CarInsurance, k=seq(3,19,by=2))
+tuning_knn
+
+trControl <- trainControl(method  = "cv",
+                          number  = 10)
+
+
+?train
+
+cidata_knn <- train(x=cidata_train[,-7], y=cidata_train[,7],
+                 method     = "knn",
+                 tuneGrid   = expand.grid(k = 13:13),
+                 trControl  = trControl,
+                 metric     = "Accuracy",
+                 preProcess = c("center", "scale")
+                 )
+
+# KNN 훈련집합 70.2%
+
+pred_cidata_KNN_te <- predict(cidata_knn, newdata = cidata_test)
+cidata_KNN_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_naive_te)
+cidata_KNN_te_CM
+(cidata_KNN_te_CM[1,1] + cidata_KNN_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+# KNN 평가집합 75.9%
+
+## LDA ##
+
+cidata_LDA <- lda(CarInsurance~., data=cidata_train)
+
+pred_cidata_LDA_tr <- predict(cidata_LDA, newdata = cidata_train)
+cidata_LDA_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_LDA_tr$class)
+cidata_LDA_tr_CM
+(cidata_LDA_tr_CM[1,1] + cidata_LDA_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+# LDA 훈련집합 80.8%
+
+pred_cidata_LDA_te <- predict(cidata_LDA, newdata = cidata_test)
+cidata_LDA_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_LDA_te$class)
+cidata_LDA_te_CM
+(cidata_LDA_te_CM[1,1] + cidata_LDA_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+# LDA 평가집합 80.3%
