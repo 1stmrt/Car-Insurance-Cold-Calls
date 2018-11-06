@@ -208,7 +208,7 @@ cidata$Outcome_ <- NULL
 summary(cidata)
 ## 진짜로 끝
 
-cluster <- makeCluster(16)
+cluster <- makeCluster(8)
 registerDoParallel(cluster)
 foreach::getDoParWorkers()
 
@@ -233,42 +233,58 @@ cidata_naive
 pred_cidata_naive_tr <- predict(cidata_naive, newdata = cidata_train)
 cidata_naive_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_naive_tr)
 cidata_naive_tr_CM
-(cidata_naive_tr_CM[1,1] + cidata_naive_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+naive_tr_acc <- (cidata_naive_tr_CM[1,1] + cidata_naive_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # 나이브베이지언 훈련집합 : 72.6 %
 
 pred_cidata_naive_te <- predict(cidata_naive, newdata = cidata_test)
 cidata_naive_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_naive_te)
 cidata_naive_te_CM
-(cidata_naive_te_CM[1,1] + cidata_naive_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+naive_te_acc <- (cidata_naive_te_CM[1,1] + cidata_naive_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # 나이브베이지언 평가집합 : 76.1 %
 
+result_naive <- as.data.frame(cbind(naive_tr_acc, naive_te_acc))
+colnames(result_naive) <- c("tr_acc", "te_acc")
+rownames(result_naive) <- c("Naïve Bayes")
+
 ## KNN ##
 
+set.seed(0105)
 tuning_knn <- tune.knn(x=cidata_train[,-7], y=cidata_train$CarInsurance, k=seq(3,19,by=2))
 tuning_knn
 
+set.seed(0105)
 trControl <- trainControl(method  = "cv",
                           number  = 10)
 
-
+set.seed(0105)
 cidata_knn <- train(x=cidata_train[,-7], y=cidata_train[,7],
                  method     = "knn",
-                 tuneGrid   = expand.grid(k = 9:13),
+                 tuneGrid   = expand.grid(k = 7:13),
                  trControl  = trControl,
                  metric     = "Accuracy",
                  preProcess = c("center", "scale")
                  )
 
-# KNN 훈련집합 71.0% : k=11
+KNN_tr_acc <- max(cidata_knn$results$Accuracy)
+
+# KNN 훈련집합 70.4% : k=11
 
 pred_cidata_KNN_te <- predict(cidata_knn, newdata = cidata_test)
 cidata_KNN_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_naive_te)
 cidata_KNN_te_CM
-(cidata_KNN_te_CM[1,1] + cidata_KNN_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+KNN_te_acc <- (cidata_KNN_te_CM[1,1] + cidata_KNN_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # KNN 평가집합 76.1%
+
+result_KNN <- as.data.frame(cbind(KNN_tr_acc, KNN_te_acc))
+colnames(result_KNN) <- c("tr_acc", "te_acc")
+rownames(result_KNN) <- c("K(11)-NN")
+
 
 ## LDA ##
 
@@ -277,16 +293,24 @@ cidata_LDA <- lda(CarInsurance~., data=cidata_train, cv=TRUE)
 pred_cidata_LDA_tr <- predict(cidata_LDA, newdata = cidata_train)
 cidata_LDA_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_LDA_tr$class)
 cidata_LDA_tr_CM
-(cidata_LDA_tr_CM[1,1] + cidata_LDA_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+LDA_tr_acc <- (cidata_LDA_tr_CM[1,1] + cidata_LDA_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # LDA 훈련집합 80.6%
 
 pred_cidata_LDA_te <- predict(cidata_LDA, newdata = cidata_test)
 cidata_LDA_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_LDA_te$class)
 cidata_LDA_te_CM
-(cidata_LDA_te_CM[1,1] + cidata_LDA_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+LDA_te_acc <- (cidata_LDA_te_CM[1,1] + cidata_LDA_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # LDA 평가집합 81.7%
+
+result_LDA <- as.data.frame(cbind(LDA_tr_acc, LDA_te_acc))
+colnames(result_LDA) <- c("tr_acc", "te_acc")
+rownames(result_LDA) <- c("LDA")
+
+## 로지스틱 분류 ##
 
 cidata_logit <- glm(CarInsurance~., data=cidata_train, family="binomial")
 summary(cidata_logit)
@@ -295,7 +319,8 @@ pred_cidata_logit_tr <- predict(cidata_logit, newdata = cidata_train, type="resp
 pred_cidata_logit_tr <- ifelse(pred_cidata_logit_tr>0.5, 1, 0) ## Threshold = 0.5
 cidata_logit_tr_CM <- table(actual = cidata_train$CarInsurance, predict=pred_cidata_logit_tr)
 cidata_logit_tr_CM
-(cidata_logit_tr_CM[1,1] + cidata_logit_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+Logistic_tr_acc <- (cidata_logit_tr_CM[1,1] + cidata_logit_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # 로지스틱 분류 훈련집합 82.0%
 
@@ -303,9 +328,16 @@ pred_cidata_logit_te <- predict(cidata_logit, newdata = cidata_test, type="respo
 pred_cidata_logit_te <- ifelse(pred_cidata_logit_te>0.5, 1, 0) ## Threshold = 0.5
 cidata_logit_te_CM <- table(actual = cidata_test$CarInsurance, predict=pred_cidata_logit_te)
 cidata_logit_te_CM
-(cidata_logit_te_CM[1,1] + cidata_logit_te_CM[2,2])/length(cidata_test$CarInsurance)
+
+Logistic_te_acc <- (cidata_logit_te_CM[1,1] + cidata_logit_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # 로지스틱 분류 평가집합 82.1%
+
+result_Logit <- as.data.frame(cbind(Logistic_tr_acc, Logistic_te_acc))
+colnames(result_Logit) <- c("tr_acc", "te_acc")
+rownames(result_Logit) <- c("Logistic")
+
+## Rpart 단일트리 ##
 
 cidata_rpart <- rpart(CarInsurance~.,data = cidata_train, control=list(minsplit=15, minbucket=5))
 cidata_rpart
@@ -313,7 +345,8 @@ cidata_rpart
 pred_cidata_rpart_tr<- predict(cidata_rpart, type="class")
 cidata_rpart_tr_CM <- table(actual = cidata_train$CarInsurance, predict=pred_cidata_rpart_tr)
 cidata_rpart_tr_CM
-(cidata_rpart_tr_CM[1,1] + cidata_rpart_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+rpart_tr_acc <- (cidata_rpart_tr_CM[1,1] + cidata_rpart_tr_CM[2,2])/length(cidata_train$CarInsurance)
 rpart.plot(cidata_rpart)
 
 # 단일 트리 rpart 훈련집합 79.3%
@@ -321,9 +354,16 @@ rpart.plot(cidata_rpart)
 pred_cidata_rpart_te <- predict(cidata_rpart, newdata = cidata_test, type="class")
 cidata_rpart_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_rpart_te)
 cidata_rpart_te_CM
-(cidata_rpart_te_CM[1,1] + cidata_rpart_te_CM[2,2])/length(cidata_test$CarInsurance)
+rpart_te_acc <- (cidata_rpart_te_CM[1,1] + cidata_rpart_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # 단일 트리 rpart 평가집합 80.6%
+
+result_rpart <- as.data.frame(cbind(rpart_tr_acc, rpart_te_acc))
+colnames(result_rpart) <- c("tr_acc", "te_acc")
+rownames(result_rpart) <- c("rpart")
+
+
+## C5.0 tree
 
 cidata_C5.0_fit <- C5.0(CarInsurance~., data=cidata_train, control = C5.0Control(minCases=10))
 summary(cidata_C5.0_fit)
@@ -331,16 +371,22 @@ summary(cidata_C5.0_fit)
 pred_cidata_C5.0_tr<- predict(cidata_C5.0_fit, newdata = cidata_train, type="class")
 cidata_C5.0_tr_CM <- table(actual = cidata_train$CarInsurance, predict=pred_cidata_C5.0_tr)
 cidata_C5.0_tr_CM
-(cidata_C5.0_tr_CM[1,1] + cidata_C5.0_tr_CM[2,2])/length(cidata_train$CarInsurance)
+C50_tr_acc <- (cidata_C5.0_tr_CM[1,1] + cidata_C5.0_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # C5.0 트리 훈련집합 82.1%
 
 pred_cidata_C5.0_te<- predict(cidata_C5.0_fit, newdata = cidata_test, type="class")
 cidata_C5.0_te_CM <- table(actual = cidata_test$CarInsurance, predict=pred_cidata_C5.0_te)
 cidata_C5.0_te_CM
-(cidata_C5.0_te_CM[1,1] + cidata_C5.0_te_CM[2,2])/length(cidata_test$CarInsurance)
+C50_te_acc <- (cidata_C5.0_te_CM[1,1] + cidata_C5.0_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # C5.0 트리 평가집합 81.4%
+
+result_c50 <- as.data.frame(cbind(C50_tr_acc, C50_te_acc))
+colnames(result_c50) <- c("tr_acc", "te_acc")
+rownames(result_c50) <- c("C5.0")
+
+## C5.0 + boosting
 
 cidata_C5.0B_fit <- C5.0(CarInsurance~., data=cidata_train, control = C5.0Control(minCases=10), trials=50)
 summary(cidata_C5.0B_fit)
@@ -348,16 +394,23 @@ summary(cidata_C5.0B_fit)
 pred_cidata_C5.0B_tr<- predict(cidata_C5.0B_fit, newdata = cidata_train, type="class")
 cidata_C5.0B_tr_CM <- table(actual = cidata_train$CarInsurance, predict=pred_cidata_C5.0B_tr)
 cidata_C5.0B_tr_CM
-(cidata_C5.0B_tr_CM[1,1] + cidata_C5.0B_tr_CM[2,2])/length(cidata_train$CarInsurance)
+C50B_tr_acc <- (cidata_C5.0B_tr_CM[1,1] + cidata_C5.0B_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # C5.0 트리 + 부스팅 훈련집합 84.1%
 
 pred_cidata_C5.0B_te<- predict(cidata_C5.0B_fit, newdata = cidata_test, type="class")
 cidata_C5.0B_te_CM <- table(actual = cidata_test$CarInsurance, predict=pred_cidata_C5.0B_te)
 cidata_C5.0B_te_CM
-(cidata_C5.0B_te_CM[1,1] + cidata_C5.0B_te_CM[2,2])/length(cidata_test$CarInsurance)
+C50B_te_acc <-(cidata_C5.0B_te_CM[1,1] + cidata_C5.0B_te_CM[2,2])/length(cidata_test$CarInsurance)
 
 # C5.0 트리 평가집합 82.9%
+
+result_c50B <- as.data.frame(cbind(C50B_tr_acc, C50B_te_acc))
+colnames(result_c50B) <- c("tr_acc", "te_acc")
+rownames(result_c50B) <- c("C5.0B")
+
+
+## RandomForest
 
 set.seed(0105)
 tuning_rf <- tune.randomForest(x=cidata_train[,-7], y=cidata_train$CarInsurance, ntree=seq(50,150,by=10), mtry=3:5)
@@ -378,20 +431,28 @@ importance(cidata_rf_fit)
 pred_cidata_rf_tr_CM <- predict(cidata_rf_fit, newdata=cidata_train, type="class")
 cidata_rf_tr_CM <- table(actual = cidata_train$CarInsurance, predict = pred_cidata_rf_tr_CM)
 cidata_rf_tr_CM
-(cidata_rf_tr_CM[1,1] + cidata_rf_tr_CM[2,2])/length(cidata_train$CarInsurance)
+RF_tr_acc <- (cidata_rf_tr_CM[1,1] + cidata_rf_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # RandomForest 훈련집합 91.8%
 
 pred_cidata_rf_te_CM <- predict(cidata_rf_fit, newdata=cidata_test, type="class")
 cidata_rf_te_CM <- table(actual = cidata_test$CarInsurance, predict = pred_cidata_rf_te_CM)
 cidata_rf_te_CM
-(cidata_rf_te_CM[1,1] + cidata_rf_te_CM[2,2])/length(cidata_test$CarInsurance)
+RF_te_acc <- (cidata_rf_te_CM[1,1] + cidata_rf_te_CM[2,2])/length(cidata_test$CarInsurance)
 
-# RandomForest 평가집합 83.4%
+# RandomForest 평가집합 82.7%
 
+result_RF <- as.data.frame(cbind(RF_tr_acc, RF_te_acc))
+colnames(result_RF) <- c("tr_acc", "te_acc")
+rownames(result_RF) <- c("RandomForest")
+
+## 선형 SVM
+
+set.seed(0105)
 tuning_linearSVM <- tune.svm(CarInsurance~., cost=c(seq(0.1,1,by=0.1),2:5),
                              kernel="linear", data=cidata_train)
 
+set.seed(0105)
 cidata_SVM_fit <- svm(CarInsurance~., cost=tuning_linearSVM$best.parameters[,1],
                       kernel="linear", data=cidata_train)
 summary(cidata_SVM_fit)
@@ -399,20 +460,30 @@ summary(cidata_SVM_fit)
 pred_cidata_linearSVM_tr <- predict(cidata_SVM_fit, newdata=cidata_train)
 cidata_SVM_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_linearSVM_tr)
 cidata_SVM_tr_CM
-(cidata_SVM_tr_CM[1,1] + cidata_SVM_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
-# 선형 SVM 흔련집합 82.5%
+Linear_SVM_tr_acc <- (cidata_SVM_tr_CM[1,1] + cidata_SVM_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+# 선형 SVM 흔련집합 82.3%
 
 pred_cidata_linearSVM_te <- predict(cidata_SVM_fit, newdata=cidata_test)
 cidata_SVM_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_linearSVM_te)
 cidata_SVM_te_CM
-(cidata_SVM_te_CM[1,1] + cidata_SVM_te_CM[2,2])/length(cidata_test$CarInsurance)
 
-# 선형 SVM 평가집합 82.2%
+Linear_SVM_te_acc <- (cidata_SVM_te_CM[1,1] + cidata_SVM_te_CM[2,2])/length(cidata_test$CarInsurance)
 
+# 선형 SVM 평가집합 82.5%
+
+result_Linear_SVM <- as.data.frame(cbind(Linear_SVM_tr_acc, Linear_SVM_te_acc))
+colnames(result_Linear_SVM) <- c("tr_acc", "te_acc")
+rownames(result_Linear_SVM) <- c("Linear_SVM")
+
+## RBF SVM
+
+set.seed(0105)
 tuning_RBFSVM <- tune.svm(CarInsurance~., cost=c(seq(0.1,1,by=0.1),2:5),
                           kernel="radial", gamma=10^(-4:2), data=cidata_train)
 
+set.seed(0105)
 cidata_RBFSVM_fit <- svm(CarInsurance~., cost=tuning_RBFSVM$best.parameters[,2],
                          degree=tuning_RBFSVM$best.parameters[,1], kernel="radial",
                         data=cidata_train)
@@ -423,16 +494,33 @@ summary(cidata_RBFSVM_fit)
 pred_cidata_RBFSVM_tr <- predict(cidata_RBFSVM_fit, newdata=cidata_train)
 cidata_RBFSVM_tr_CM <- table(actual = cidata_train$CarInsurance, predicted = pred_cidata_RBFSVM_tr)
 cidata_RBFSVM_tr_CM
-(cidata_RBFSVM_tr_CM[1,1] + cidata_RBFSVM_tr_CM[2,2])/length(cidata_train$CarInsurance)
+
+RBF_SVM_tr_acc <- (cidata_RBFSVM_tr_CM[1,1] + cidata_RBFSVM_tr_CM[2,2])/length(cidata_train$CarInsurance)
 
 # RBF SVM 흔련집합 88.2%
 
 pred_cidata_RBFSVM_te <- predict(cidata_SVM_fit, newdata=cidata_test)
 cidata_RBFSVM_te_CM <- table(actual = cidata_test$CarInsurance, predicted = pred_cidata_RBFSVM_te)
 cidata_RBFSVM_te_CM
-(cidata_RBFSVM_te_CM[1,1] + cidata_RBFSVM_te_CM[2,2])/length(cidata_test$CarInsurance)
 
-# RBF SVM 평가집합 82.2%
+RBF_SVM_te_acc <- (cidata_RBFSVM_te_CM[1,1] + cidata_RBFSVM_te_CM[2,2])/length(cidata_test$CarInsurance)
 
+# RBF SVM 평가집합 82.5%
 
+result_RBF_SVM <- as.data.frame(cbind(RBF_SVM_tr_acc, RBF_SVM_te_acc))
+colnames(result_RBF_SVM) <- c("tr_acc", "te_acc")
+rownames(result_RBF_SVM) <- c("RBF_SVM")
+
+result_table <- rbind(result_naive,
+                      result_KNN,
+                      result_Logit,
+                      result_LDA,
+                      result_rpart,
+                      result_c50,
+                      result_c50B,
+                      result_RF,
+                      result_Linear_SVM,
+                      result_RBF_SVM)
+
+## 결과 정리
 
